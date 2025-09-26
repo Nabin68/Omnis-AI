@@ -23,8 +23,15 @@ env_path = os.path.join(BASE_DIR, ".env")
 env = dotenv_values(env_path)
 
 class FacebookModule:
-    scroll_active = False
-    scroll_thread = None
+    scrolling = False
+    
+    speed_map = {
+        1: (1, 0.01),
+        2: (2, 0.008),
+        3: (4, 0.005),
+        4: (6, 0.003),
+        5: (10, 0.001)
+    }
     
     @staticmethod
     def open_facebook(driver):
@@ -121,9 +128,24 @@ class FacebookModule:
         except Exception as e:
             print(f"❌ Unexpected error: {e}")
             return False
-    
-    #little issue here to be fixed button not located
+        
     @staticmethod
+    def play_videos():
+        driver = MaintainState.get_or_create_driver()
+        try:
+            videos_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "(//a[contains(@href,'/watch/')])[1]"))
+            )
+            driver.execute_script("arguments[0].click();", videos_button)  # safer click
+            print("✅ Video clicked")
+        except Exception:
+            print("❌ Video button not found")
+        
+        # Fixed: Call the correct method name
+        FacebookModule.mute_unmute_video()
+
+        
+    @staticmethod    
     def mute_unmute_video():
             driver = MaintainState.get_or_create_driver()
             try:
@@ -157,21 +179,7 @@ class FacebookModule:
                     
             except Exception as e:
                 print("❌ Video Mute/Unmute button not found:", e)
-     
-    @staticmethod
-    def play_videos():
-        driver = MaintainState.get_or_create_driver()
-        try:
-            videos_button = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "(//a[contains(@href,'/watch/')])[1]"))
-            )
-            driver.execute_script("arguments[0].click();", videos_button)  # safer click
-            print("✅ Video clicked")
-        except Exception:
-            print("❌ Video button not found")
         
-        FacebookModule.mute_unmute_video()   
-    
     @staticmethod
     def play_pause():
         driver = MaintainState.get_or_create_driver()
@@ -207,7 +215,6 @@ class FacebookModule:
         except Exception as e:
             print("❌ Story not found:", e)
             
-    #little issue here to be fixed button not located
     @staticmethod
     def close_story():
         driver = MaintainState.get_or_create_driver()
@@ -243,8 +250,6 @@ class FacebookModule:
         except Exception as e:
             print("❌ Story close button not found:", e)
         
-        
-    #little issue here to be fixed button not located
     @staticmethod
     def mute_unmute_story():
             driver = MaintainState.get_or_create_driver()
@@ -306,99 +311,49 @@ class FacebookModule:
 
     @staticmethod
     def scroll_feed_up(speed):
-        """Start scrolling Facebook feed upward"""
-        direction = "up"
-
-        # Stop any existing scroll first
-        if FacebookModule.scroll_active:
-            FacebookModule.stop_scroll_feed()
-            time.sleep(0.3)
-
-        try:
-            FacebookModule.scroll_active = True
-            FacebookModule.scroll_thread = threading.Thread(
-                target=FacebookModule._scroll_worker,
-                args=(direction, speed)
-            )
-            FacebookModule.scroll_thread.daemon = True
-            FacebookModule.scroll_thread.start()
-            print(f"✅ Feed scrolling {direction} at speed {speed}")
-            return True
-        except Exception as e:
-            FacebookModule.scroll_active = False
-            print(f"❌ Failed to start scrolling: {e}")
-            return False
+        """Scroll up the page at specified speed"""
+        driver = MaintainState.get_or_create_driver()
+        FacebookModule.scrolling = True
+        pixels, delay = FacebookModule.speed_map.get(speed, (1, 0.01))
+        
+        def run():
+            while FacebookModule.scrolling:
+                driver.execute_script(f"window.scrollBy(0, -{pixels});")
+                time.sleep(delay)
+        
+        threading.Thread(target=run, daemon=True).start()
+        print("Scrolling up...")
 
     @staticmethod
     def scroll_feed_down(speed):
-        """Start scrolling Facebook feed downward"""
-        direction = "down"
-
-        if FacebookModule.scroll_active:
-            FacebookModule.stop_scroll_feed()
-            time.sleep(0.3)
-
-        try:
-            FacebookModule.scroll_active = True
-            FacebookModule.scroll_thread = threading.Thread(
-                target=FacebookModule._scroll_worker,
-                args=(direction, speed)
-            )
-            FacebookModule.scroll_thread.daemon = True
-            FacebookModule.scroll_thread.start()
-            print(f"✅ Feed scrolling {direction} at speed {speed}")
-            return True
-        except Exception as e:
-            FacebookModule.scroll_active = False
-            print(f"❌ Failed to start scrolling: {e}")
-            return False
+        """Scroll down the page at specified speed"""
+        driver = MaintainState.get_or_create_driver()
+        FacebookModule.scrolling = True
+        pixels, delay = FacebookModule.speed_map.get(speed, (1, 0.01))
+        
+        def run():
+            while FacebookModule.scrolling:
+                driver.execute_script(f"window.scrollBy(0, {pixels});")
+                time.sleep(delay)
+        
+        threading.Thread(target=run, daemon=True).start()
+        print("Scrolling down...")
 
     @staticmethod
     def stop_scroll_feed():
-        """Stop any active feed scrolling"""
-        if FacebookModule.scroll_active:
-            FacebookModule.scroll_active = False
-            if FacebookModule.scroll_thread and FacebookModule.scroll_thread.is_alive():
-                FacebookModule.scroll_thread.join(timeout=1)
-            print("🛑 Feed scrolling stopped")
-            return True
-        else:
-            print("ℹ️ No active scrolling to stop")
-            return False
+        """Stop the scrolling"""
+        FacebookModule.scrolling = False
+        print("Scrolling stopped.")
 
-    @staticmethod
-    def _scroll_worker(direction, speed):
-        """Internal function that handles the continuous scrolling - IMPROVED for smoother human-like scrolling"""
-        driver = MaintainState.get_or_create_driver()
-
-        # Smaller scroll increments for smoother scrolling (50px instead of 500px)
-        if direction == "up":
-            scroll_script = "window.scrollBy(0, -50);"
-        else:
-            scroll_script = "window.scrollBy(0, 50);"
-
-        # Faster delay mapping for smoother scrolling (since we're scrolling smaller amounts)
-        speed_delays = {1: 0.15, 2: 0.12, 3: 0.08, 4: 0.05, 5: 0.03}
-        delay = speed_delays.get(speed, 0.15)
-
-        while FacebookModule.scroll_active:
-            try:
-                driver.execute_script(scroll_script)
-                time.sleep(delay)
-            except Exception as e:
-                print(f"❌ Scroll error: {e}")
-                break
-
-#used main function for testing purpose
 if __name__ == "__main__":
     driver = MaintainState.get_or_create_driver()
     result = FacebookModule.facebook()
     time.sleep(5)
-    FacebookModule.scroll_feed_up(1)
+    FacebookModule.scroll_feed_down(2)
     time.sleep(3)
     FacebookModule.stop_scroll_feed()
     time.sleep(3)
-    FacebookModule.scroll_feed_down(1)
+    FacebookModule.scroll_feed_up(2)
     time.sleep(3)
     FacebookModule.stop_scroll_feed()
     time.sleep(3)

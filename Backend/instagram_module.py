@@ -8,11 +8,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
-from maintain_state import MaintainState  
-
-
-scroll_active = False
-scroll_thread = None
+from maintain_state import MaintainState
     
 try:
     # Works in normal .py file
@@ -25,9 +21,20 @@ env_path = os.path.join(BASE_DIR, ".env")
 env = dotenv_values(env_path)
 
 class InstagramModule:
+    # Class-level variables for scroll control
+    scrolling = False
+    
+    # Map speed to pixels per step and delay
+    speed_map = {
+        1: (1, 0.01),
+        2: (2, 0.008),
+        3: (4, 0.005),
+        4: (6, 0.003),
+        5: (10, 0.001)
+    }
     
     @staticmethod
-    def open_instagram(driver, query):
+    def open_instagram(driver):
         """Function to login into Instagram"""
         try:
             # Open new tab and navigate to Instagram
@@ -127,7 +134,7 @@ class InstagramModule:
             return False
     
     @staticmethod
-    def instagram(query):
+    def instagram():
         """Main entry to Instagram module"""
         try:
             # Get or create driver using centralized state management
@@ -137,7 +144,7 @@ class InstagramModule:
                 print("❌ Failed to get Chrome driver!")
                 return False
             
-            success = InstagramModule.open_instagram(driver, query)
+            success = InstagramModule.open_instagram(driver)
             
             if success:
                 print("🎉 Instagram login successful!")
@@ -301,111 +308,49 @@ class InstagramModule:
 
     @staticmethod
     def scroll_feed_down(speed):
-        """Start scrolling Instagram feed upward"""
-        global scroll_active, scroll_thread
-        direction = "up"
-
-        # Stop any existing scroll first
-        if scroll_active:
-            InstagramModule.stop_scroll_feed()
-            time.sleep(0.3)
-
-        try:
-            scroll_active = True
-            scroll_thread = threading.Thread(
-                target=InstagramModule._scroll_worker,
-                args=(direction, speed)
-            )
-            scroll_thread.daemon = True
-            scroll_thread.start()
-            print(f"✅ Feed scrolling {direction} at speed {speed}")
-            return True
-        except Exception as e:
-            scroll_active = False
-            print(f"❌ Failed to start scrolling: {e}")
-            return False
+        """Scroll down the page at specified speed"""
+        driver = MaintainState.get_or_create_driver()
+        InstagramModule.scrolling = True
+        pixels, delay = InstagramModule.speed_map.get(speed, (1, 0.01))
+        
+        def run():
+            while InstagramModule.scrolling:
+                driver.execute_script(f"window.scrollBy(0, {pixels});")
+                time.sleep(delay)
+        
+        threading.Thread(target=run, daemon=True).start()
+        print("Scrolling down...")
 
     @staticmethod
     def scroll_feed_up(speed):
-        """Start scrolling Instagram feed downward"""
-        global scroll_active, scroll_thread
-        direction = "down"
-
-        if scroll_active:
-            InstagramModule.stop_scroll_feed()
-            time.sleep(0.3)
-
-        try:
-            scroll_active = True
-            scroll_thread = threading.Thread(
-                target=InstagramModule._scroll_worker,
-                args=(direction, speed)
-            )
-            scroll_thread.daemon = True
-            scroll_thread.start()
-            print(f"✅ Feed scrolling {direction} at speed {speed}")
-            return True
-        except Exception as e:
-            scroll_active = False
-            print(f"❌ Failed to start scrolling: {e}")
-            return False
-
+        """Scroll up the page at specified speed"""
+        driver = MaintainState.get_or_create_driver()
+        InstagramModule.scrolling = True
+        pixels, delay = InstagramModule.speed_map.get(speed, (1, 0.01))
+        
+        def run():
+            while InstagramModule.scrolling:
+                driver.execute_script(f"window.scrollBy(0, -{pixels});")
+                time.sleep(delay)
+        
+        threading.Thread(target=run, daemon=True).start()
+        print("Scrolling up...")
+        
     @staticmethod
     def stop_scroll_feed():
-        """Stop any active feed scrolling"""
-        global scroll_active, scroll_thread
-        
-        if scroll_active:
-            scroll_active = False
-            if scroll_thread and scroll_thread.is_alive():
-                scroll_thread.join(timeout=1)
-            print("🛑 Feed scrolling stopped")
-            return True
-        else:
-            print("ℹ️ No active scrolling to stop")
-            return False
+        """Stop the scrolling"""
+        InstagramModule.scrolling = False
+        print("Scrolling stopped.")
 
-    @staticmethod
-    def _scroll_worker(direction, speed):
-        """Internal function that handles smooth, human-like scrolling"""
-        global scroll_active
-        
-        driver = MaintainState.get_or_create_driver()
-
-        # Much smaller scroll increments for smoothness
-        if direction == "up":
-            scroll_amount = -20  # Small upward scroll
-        else:
-            scroll_amount = 20   # Small downward scroll
-
-        # Speed settings - smaller delays for smoother scrolling
-        speed_delays = {
-            1: 0.08,   # Slowest - very smooth
-            2: 0.06,   # Slow
-            3: 0.04,   # Medium
-            4: 0.03,   # Fast
-            5: 0.02    # Fastest
-        }
-        delay = speed_delays.get(speed, 0.04)
-
-        while scroll_active:
-            try:
-                # Use smooth scrolling with smaller increments
-                scroll_script = f"window.scrollBy({{top: {scroll_amount}, behavior: 'smooth'}});"
-                driver.execute_script(scroll_script)
-                time.sleep(delay)
-            except Exception as e:
-                print(f"❌ Scroll error: {e}")
-                break
-            
-if __name__ == "__main__":  #For testing purposes, I wrote these code 
-    result = InstagramModule.instagram("reels")
+  
+if __name__ == "__main__":
+    result = InstagramModule.instagram()
     time.sleep(5)
-    InstagramModule.scroll_feed_up(1)
+    InstagramModule.scroll_feed_down(1)
     time.sleep(3)
     InstagramModule.stop_scroll_feed()
     time.sleep(3)
-    InstagramModule.scroll_feed_down(1)
+    InstagramModule.scroll_feed_up(1)
     time.sleep(3)
     InstagramModule.stop_scroll_feed()
     time.sleep(3)
